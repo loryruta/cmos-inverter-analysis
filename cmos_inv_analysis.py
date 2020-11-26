@@ -284,9 +284,6 @@ def cmos_inverter_I_d(V_in):
 def main():
 	import matplotlib.pyplot as plt
 
-	V_in_arr = []
-	I_d_arr = []
-
 	N_SAMPLES = 100
 
 	V_in = np.linspace(0, V_dd, N_SAMPLES)
@@ -303,10 +300,14 @@ def main():
 
 	# I_d(V_in)
 	ax1.set_title("I_d(V_in)")
+	ax1.set(xlabel="V_in [V]")
+	ax1.set(ylabel="I_d [µA]")
 	ax1.plot(V_in, I_d)
 
 	# V_ds_n(V_in)
 	ax2.set_title("V_ds_n(V_in)")
+	ax2.set(xlabel="V_in [V]")
+	ax2.set(ylabel="V_ds_n [V]")
 	ax2.plot(V_in, V_ds_n, 'tab:red')
 
 	plt.show()
