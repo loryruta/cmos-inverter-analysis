@@ -309,7 +309,7 @@ def main():
 	ax2.set_title("V_ds_n(V_in)")
 	ax2.plot(V_in, V_ds_n, 'tab:red')
 
-	fig.show()
+	plt.show()
 
 if __name__ == "__main__":
 	main()
