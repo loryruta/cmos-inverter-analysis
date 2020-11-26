@@ -1,33 +1,33 @@
 import numpy as np
 import scipy.optimize as scipy
 
-V_dd = 2
-GND = 0
-
 # Dati fisici / geometrici presi da:
 # https://dolly.ingmo.unimore.it/2020/mod/resource/view.php?id=1715
-
-# IMPORTANTE:
-# Suppongo che la corrente di saturazione è raggiunta quando V_min = min{ V_ds_n, V_dsat_n, V_gs_n - V_t_n} = V_gs_n - V_t_n.
+#
+# Considerazioni:
+# Suppongo che la corrente di saturazione è raggiunta quando (nel caso dell'nMOS) V_min = min{ V_ds_n, V_dsat_n, V_gs_n - V_t_n} = V_gs_n - V_t_n.
 # Questa caratteristica è tipica di transistor lunghi, poiché V_dsat_n = E_crit * L (quindi con L lunga).
 # Di conseguenza, sempre nel caso dell'nMOS, la corrente di saturazione avrà equazione:
 # I_dsat_n = (1 / 2) * k_n * a_n * (V_gs_n - V_t_n)^2 * (1 + lambda_n * V_ds_n)
 # Faccio lo stesso ragionamento in modo analogo per il pMOS.
 #
 # Test fatti su Geogebra:
-# https://www.geogebra.org/calculator/w9zjdbgj
-
+# https://www.geogebra.org/calculator/wmymk8gu
+#
 # pMOS equation:
 # I_d = k_p * a_p * V_min * (V_sg_p - abs(V_t_p) - V_min / 2) * (1 + abs(lambda_p) * V_sd_p) if V_sg_p > abs(V_t_p) else 0
-
+#
 # nMOS equation:
 # I_d = k_n * a_n * V_min * (V_gs_n - V_t_n - V_min / 2) * (1 + lambda_n * V_ds_n) if V_gs_n > V_t_n else 0
 
+V_dd = 2
+GND = 0
 
-# nMOS
-k_n = 200 # µA / V^2
+# ------------------------------------------------------------------------------------------------ nMOS
+
+k_n = 200  # µA / V^2
 a_n = 1
-lambda_n = 0.1
+lambda_n = 0.12
 V_dsat_n = 0.4
 V_t_n = 0.35
 
@@ -45,8 +45,9 @@ def nMOS_is_sat(V_gs_n, V_ds_n):
 	t = V_gs_n - abs(V_t_n)
 	return not nMOS_is_off(V_gs_n) and V_ds_n > t
 
-# pMOS
-k_p = 200
+# ------------------------------------------------------------------------------------------------ pMOS
+
+k_p = 200  # µA / V^2
 a_p = 1
 lambda_p = 0.12
 V_dsat_p = 0.4
@@ -66,18 +67,21 @@ def pMOS_is_sat(V_sg_p, V_sd_p):
 	t = V_sg_p - abs(V_t_p)
 	return not pMOS_is_off(V_sg_p) and V_sd_p > t
 
+
 # V_m
 r = (k_p * V_dsat_p) / (k_n * V_dsat_n)
 
 V_m = (r * V_dd) / (1 + r)
 print("V_m: ~%.2fV" % V_m)
 
+# ------------------------------------------------------------------------------------------------ CMOS Inverter
+
 
 def cmos_inverter_I_d(V_in):
 	V_gs_n = V_in - GND
 	V_sg_p = V_dd - V_in
 	
-	# Coefficienti utili presenti nell'equazione di saturazione.
+	# Coefficienti utili presenti nell'equazione di pinchoff.
 	C_n = (1 / 2) * k_n * a_n * (V_gs_n - V_t_n)**2
 	C_p = (1 / 2) * k_p * a_p * (V_sg_p - abs(V_t_p))**2
 	
@@ -104,7 +108,7 @@ def cmos_inverter_I_d(V_in):
 		return None
 	
 	def pMOS_pinchoff_and_nMOS_pinchoff():
-		# Nel caso in cui entrambi siano in pinchoff ottengo un sistema lineare che posso facilmente risolvere.
+		# Nel caso in cui entrambi siano in pinchoff ottengo un sistema lineare che posso facilmente risolvibile.
 
 		m_n = C_n * lambda_n
 		m_p = -C_p * abs(lambda_p)
@@ -268,11 +272,13 @@ def cmos_inverter_I_d(V_in):
 	if sol is None:
 		sol = pMOS_pinchoff_and_nMOS_pinchoff()  # pMOS sat e nMOS sat
 	
-	if sol is None:
+	if sol is None:  # Non è ancora stata trovata una soluzione, com'è possibile!? Significa che ho sbagliato qualcosa.
 		print("ERRORE: V_in=%.3fV => UNKNOWN" % V_in)
 		sol = [0, 0, 0]
 	
 	return sol
+
+# ------------------------------------------------------------------------------------------------ Main
 
 
 def main():
@@ -281,20 +287,29 @@ def main():
 	V_in_arr = []
 	I_d_arr = []
 
-	divisions = 100 # Numero di step in cui suddividere l'intervallo [0, V_dd].
+	N_SAMPLES = 100
 
-	for i in range(0, divisions):
-		V_in = V_dd / divisions * i
-		[I_d, V_ds_n, V_sd_p] = cmos_inverter_I_d(V_in)
+	V_in = np.linspace(0, V_dd, N_SAMPLES)
+	sols = list(map(cmos_inverter_I_d, V_in))
 
-		V_in_arr.append(V_in)
-		I_d_arr.append(I_d)
+	# Trovare un modo migliore per estrarre le singole soluzioni:
+	I_d = [sol[0] for sol in sols]
+	V_ds_n = [sol[1] for sol in sols]
+	#V_sd_p = [sol[2] for sol in sols]
 
-	plt.plot(V_in_arr, I_d_arr)
-	plt.title('I_d(V_in)')
-	plt.xlabel('V_in [V]')
-	plt.ylabel('I_d [µA]')
-	plt.show()
+	# https://matplotlib.org/devdocs/gallery/subplots_axes_and_figures/subplots_demo.html
+	fig, (ax1, ax2) = plt.subplots(1, 2)
+	fig.suptitle('Analisi invertitore CMOS')
+
+	# I_d(V_in)
+	ax1.set_title("I_d(V_in)")
+	ax1.plot(V_in, I_d)
+
+	# V_ds_n(V_in)
+	ax2.set_title("V_ds_n(V_in)")
+	ax2.plot(V_in, V_ds_n, 'tab:red')
+
+	fig.show()
 
 if __name__ == "__main__":
 	main()
